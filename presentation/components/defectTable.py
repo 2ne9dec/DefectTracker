@@ -57,7 +57,7 @@ class DefectTable:
             "Устранил",
             "Действия",
         ]
-        widths = [70, 64, 520, 100, 130, 100, 130, 0]  # 0 = actions stretches
+        widths = [70, 64, 460, 100, 130, 100, 130, 0]  # 0 = actions stretches
 
         # Заголовок
         hdr = ctk.CTkFrame(container, fg_color="#1e3a6b", corner_radius=6)

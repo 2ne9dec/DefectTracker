@@ -2,8 +2,6 @@ import datetime
 import calendar
 import customtkinter as ctk
 
-from shared.utils.dateUtils import parse_date_input
-
 class InlineDatePicker(ctk.CTkToplevel):
     """
     Всплывающий календарь, привязанный к виджету-якорю.
@@ -13,7 +11,6 @@ class InlineDatePicker(ctk.CTkToplevel):
     def __init__(self, master, anchor_widget, date_var: ctk.StringVar, initial_iso: str | None = None):
         super().__init__(master)
 
-        self.transient(master)
         self.resizable(False, False)
         # Скрываем стандартный заголовок окна
         self.after(10, lambda: self.wm_overrideredirect(True))
@@ -51,8 +48,26 @@ class InlineDatePicker(ctk.CTkToplevel):
 
     def _position_under(self, widget):
         widget.update_idletasks()
+        self.update_idletasks()
+
         x = widget.winfo_rootx()
-        y = widget.winfo_rooty() + widget.winfo_height() + 2
+        y_below = widget.winfo_rooty() + widget.winfo_height() + 2
+
+        cal_h = self.winfo_reqheight()
+        screen_h = self.winfo_screenheight()
+
+        # Если снизу не влазит — показываем сверху над инпутом
+        if y_below + cal_h > screen_h - 40:
+            y = widget.winfo_rooty() - cal_h - 2
+        else:
+            y = y_below
+
+        # Не уходить за левый/правый край
+        cal_w = self.winfo_reqwidth()
+        screen_w = self.winfo_screenwidth()
+        x = min(x, screen_w - cal_w - 10)
+        x = max(x, 10)
+
         self.geometry(f"+{x}+{y}")
 
     def _on_root_click(self, event):
@@ -77,6 +92,10 @@ class InlineDatePicker(ctk.CTkToplevel):
             pass
         try:
             self.destroy()
+        except Exception:
+            pass
+        try:
+            self._anchor.focus_set()
         except Exception:
             pass
 
