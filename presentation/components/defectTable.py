@@ -46,44 +46,34 @@ class DefectTable:
         self._build(container, records, tab, on_detail, on_fix, on_copy, on_delete)
 
     def _build(self, container, records, tab, on_detail, on_fix, on_copy, on_delete):
-        # Конфигурация колонок
-        if tab == "active":
-            cols = [
-                "Опора",
-                "Кол-во",
-                "Элементы / Дефекты",
-                "Дата обн.",
-                "Обнаружил",
-                "Статус",
-                "Действия",
-            ]
-            widths = [70, 64, 420, 100, 150, 110, 170]
-        else:
-            cols = [
-                "Опора",
-                "Кол-во",
-                "Элементы / Дефекты",
-                "Дата обн.",
-                "Обнаружил",
-                "Дата устр.",
-                "Устранил",
-                "Действия",
-            ]
-            widths = [70, 64, 340, 100, 130, 100, 130, 130]
+        # Единая конфигурация колонок: всегда показываем дату устр. и кто устранил
+        cols = [
+            "Опора",
+            "Кол-во",
+            "Элементы / Дефекты",
+            "Дата обн.",
+            "Обнаружил",
+            "Дата устр.",
+            "Устранил",
+            "Действия",
+        ]
+        widths = [70, 64, 520, 100, 130, 100, 130, 0]  # 0 = actions stretches
 
         # Заголовок
         hdr = ctk.CTkFrame(container, fg_color="#1e3a6b", corner_radius=6)
         hdr.pack(fill="x", pady=(0, 2))
         for i, (h, w) in enumerate(zip(cols, widths)):
+            kw = {"width": w} if w else {}
             ctk.CTkLabel(
                 hdr,
                 text=h,
-                width=w,
                 height=30,
                 font=ctk.CTkFont(size=11, weight="bold"),
                 text_color="white",
                 anchor="w" if i == 2 else "center",
+                **kw,
             ).grid(row=0, column=i, padx=2, pady=2, sticky="ew")
+        hdr.grid_columnconfigure(7, weight=1)  # Действия растягиваются
 
         if not records:
             msg = (
@@ -91,9 +81,7 @@ class DefectTable:
                 if tab == "active"
                 else "Устранённых дефектов нет."
             )
-            ctk.CTkLabel(
-                container, text=msg, font=ctk.CTkFont(size=13), text_color="gray60"
-            ).pack(pady=30)
+            ctk.CTkLabel(container, text=msg, font=ctk.CTkFont(size=13), text_color="gray60").pack(pady=30)
             return
 
         # Группировка по опорам
@@ -141,7 +129,7 @@ class DefectTable:
             ).grid(row=0, column=1, padx=2, sticky="ew")
 
             summary = make_summary(pole_recs)
-            ctk.CTkLabel(
+            summary_lbl = ctk.CTkLabel(
                 row_f,
                 text=summary,
                 width=widths[2],
@@ -152,7 +140,12 @@ class DefectTable:
                 justify="left",
                 wraplength=widths[2] - 12,
                 font=ctk.CTkFont(size=10),
-            ).grid(row=0, column=2, padx=2, sticky="ew")
+                cursor="hand2",
+            )
+            summary_lbl.grid(row=0, column=2, padx=2, sticky="ew")
+            summary_lbl.bind("<Button-1>", lambda e, recs=pole_recs, pn=pole_num: on_detail(recs, pn, on_fix))
+            summary_lbl.bind("<Enter>", lambda e, lbl=summary_lbl: lbl.configure(fg_color="gray30"))
+            summary_lbl.bind("<Leave>", lambda e, lbl=summary_lbl: lbl.configure(fg_color="gray22"))
 
             date_found = min((r[3] for r in pole_recs if r[3]), default="-")
             ctk.CTkLabel(
@@ -176,66 +169,40 @@ class DefectTable:
                 anchor="w",
             ).grid(row=0, column=4, padx=2, sticky="ew")
 
-            col_offset = 5
-            if tab == "fixed":
-                date_fixed = max((r[5] for r in pole_recs if r[5]), default="-")
-                ctk.CTkLabel(
-                    row_f,
-                    text=fmt_date(date_fixed),
-                    width=widths[5],
-                    height=42,
-                    fg_color="gray25",
-                    corner_radius=4,
-                    anchor="center",
-                ).grid(row=0, column=5, padx=2, sticky="ew")
-                fixer = next((r[6] for r in pole_recs if r[6]), "-")
-                ctk.CTkLabel(
-                    row_f,
-                    text=fixer,
-                    width=widths[6],
-                    height=42,
-                    fg_color="gray25",
-                    corner_radius=4,
-                    anchor="w",
-                ).grid(row=0, column=6, padx=2, sticky="ew")
-                col_offset = 7
-            else:
-                ctk.CTkLabel(
-                    row_f,
-                    text="⚠  Не устранено",
-                    width=widths[5],
-                    height=42,
-                    fg_color="#8b4800",
-                    text_color="white",
-                    corner_radius=4,
-                    anchor="center",
-                ).grid(row=0, column=5, padx=2, sticky="ew")
-                col_offset = 6
+            # Колонки устранения — всегда отображаем
+            is_fixed_row = any(r[5] for r in pole_recs)
+            date_fixed = max((r[5] for r in pole_recs if r[5]), default=None)
+            fixer = next((r[6] for r in pole_recs if r[6]), None)
+
+            ctk.CTkLabel(
+                row_f,
+                text=fmt_date(date_fixed) if date_fixed else "—",
+                width=widths[5],
+                height=42,
+                fg_color="#1a4a2e" if date_fixed else "gray22",
+                text_color="#6fcf97" if date_fixed else "gray50",
+                corner_radius=4,
+                anchor="center",
+            ).grid(row=0, column=5, padx=2, sticky="ew")
+
+            ctk.CTkLabel(
+                row_f,
+                text=fixer if fixer else "—",
+                width=widths[6],
+                height=42,
+                fg_color="#1a4a2e" if fixer else "gray22",
+                text_color="#6fcf97" if fixer else "gray50",
+                corner_radius=4,
+                anchor="w",
+            ).grid(row=0, column=6, padx=2, sticky="ew")
+
+            col_offset = 7
 
             act = ctk.CTkFrame(row_f, fg_color="transparent")
             act.grid(row=0, column=col_offset, padx=6, sticky="ew")
+            row_f.grid_columnconfigure(col_offset, weight=1)
 
-            ctk.CTkButton(
-                act,
-                text="🔍",
-                width=38,
-                height=34,
-                fg_color="gray35",
-                hover_color="gray50",
-                command=lambda recs=pole_recs, pn=pole_num: on_detail(recs, pn),
-            ).pack(side="left", padx=2)
-
-            if tab == "active":
-                ctk.CTkButton(
-                    act,
-                    text="✓ Устранить",
-                    width=90,
-                    height=34,
-                    fg_color="#e67700",
-                    hover_color="#b35900",
-                    font=ctk.CTkFont(size=11, weight="bold"),
-                    command=lambda iids=ids, pn=pole_num: on_fix(iids, pn),
-                ).pack(side="left", padx=2)
+            if not is_fixed_row:
                 ctk.CTkButton(
                     act,
                     text="📋",

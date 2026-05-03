@@ -19,7 +19,6 @@ from presentation.dialogs.createSheetDialog import CreateSheetDialog
 
 logger = get_logger(__name__)
 
-
 class DefectApp(ctk.CTk, AppMixins):
     """
     Корневое окно приложения.
@@ -57,6 +56,7 @@ class DefectApp(ctk.CTk, AppMixins):
         self.current_pole_count: int = 0
 
         self._build_header()
+        self._header_bar.pack_forget()  # скрыт на главном экране
         self._show_start()
 
     # ─────────────────────── HEADER ─────────────────────────────────────────
@@ -77,30 +77,13 @@ class DefectApp(ctk.CTk, AppMixins):
             command=self._show_start,
         )
 
-        ctk.CTkLabel(
-            inner,
-            text="Дефекты ЛЭП",
-            font=ctk.CTkFont(family="Segoe UI", size=18, weight="bold"),
-            text_color="white",
-        ).pack(side="left", padx=12)
-
-        # Кнопки справа
-        ctk.CTkButton(
-            inner,
-            text="💾 Резервная копия",
-            width=160,
-            height=32,
-            fg_color="gray35",
-            hover_color="gray50",
-            command=self._backup_service.create_backup,
-        ).pack(side="right", padx=4)
-
     # ─────────────────────── НАВИГАЦИЯ ──────────────────────────────────────
 
     def _show_start(self):
         """Переключиться на главный экран (список листков)."""
         self._clear_content()
         self._back_btn.pack_forget()
+        self._header_bar.pack_forget()
         self.current_sheet_id = None
 
         sheets = self._sheet_service.get_all()
@@ -110,6 +93,7 @@ class DefectApp(ctk.CTk, AppMixins):
             on_create=self._open_create_dialog,
             on_open=self._open_sheet,
             on_delete=self._delete_sheet,
+            on_backup=self._backup_service.create_backup,
         )
 
     def _open_sheet(self, sheet_id: int):
@@ -127,7 +111,6 @@ class DefectApp(ctk.CTk, AppMixins):
         self.current_pole_count = pole_count or 0
 
         self._clear_content()
-        self._back_btn.pack(side="left")
 
         SheetScreen(
             parent=self._content,
@@ -139,6 +122,7 @@ class DefectApp(ctk.CTk, AppMixins):
             defect_service=self._defect_service,
             ref_service=self._ref_service,
             on_export=self._export_current_sheet,
+            on_back=self._show_start,
         )
 
     # ─────────────────────── ЛИСТКИ ─────────────────────────────────────────
@@ -195,12 +179,10 @@ class DefectApp(ctk.CTk, AppMixins):
             pass
         self.destroy()
 
-
 def main():
     app = DefectApp()
     app.protocol("WM_DELETE_WINDOW", app.on_close)
     app.mainloop()
-
 
 if __name__ == "__main__":
     main()

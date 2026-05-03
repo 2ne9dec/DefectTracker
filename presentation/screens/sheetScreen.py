@@ -3,7 +3,7 @@ import tkinter.messagebox as msg
 import customtkinter as ctk
 
 from shared.utils.dateUtils import fmt_date, parse_date_input
-from shared.widgets.datePicker import DatePickerDialog
+from shared.widgets.datePicker import DatePickerDialog, InlineDatePicker
 from presentation.dialogs.createSheetDialog import ScrollableDropdown
 from shared.constants import SEVERITY_COLORS, SEVERITY_LABELS
 from presentation.components.defectTable import DefectTable
@@ -32,6 +32,7 @@ class SheetScreen:
         defect_service,
         ref_service,
         on_export,
+        on_back=None,
     ):
         self._parent = parent
         self._sheet_id = sheet_id
@@ -42,6 +43,7 @@ class SheetScreen:
         self._defect_service = defect_service
         self._ref_service = ref_service
         self._on_export = on_export
+        self._on_back = on_back or (lambda: None)
 
         self._defect_id_selected: int | None = None
         self._tab_var = ctk.StringVar(value="active")
@@ -64,15 +66,25 @@ class SheetScreen:
     def _build_info_bar(self, parent):
         info = ctk.CTkFrame(parent, fg_color="#243e6b", corner_radius=0)
         info.pack(fill="x")
+        ctk.CTkButton(
+            info,
+            text="← Назад",
+            width=90,
+            height=30,
+            fg_color="#2b579a",
+            hover_color="#3a6abf",
+            command=self._on_back,
+        ).pack(side="left", padx=(12, 4), pady=6)
         ctk.CTkLabel(
             info,
             text=f"Линия: {self._line}   |   Филиал: {self._filial}   |   {self._voltage} кВ",
             font=ctk.CTkFont(size=13),
             text_color="#a8c4f0",
-        ).pack(side="left", padx=16, pady=6)
+        ).pack(side="left", padx=8, pady=6)
+
         ctk.CTkButton(
             info,
-            text="📊 Экспорт Excel",
+            text="📊 Сохранить в Excel",
             width=150,
             height=30,
             fg_color="#217346",
@@ -83,16 +95,6 @@ class SheetScreen:
     def _build_tabs(self, parent):
         tab_bar = ctk.CTkFrame(parent, fg_color="transparent")
         tab_bar.pack(fill="x", padx=16, pady=(8, 0))
-
-        for label, value in [("⚠ Активные", "active"), ("✅ Устранённые", "fixed")]:
-            ctk.CTkRadioButton(
-                tab_bar,
-                text=label,
-                variable=self._tab_var,
-                value=value,
-                command=self._refresh_table,
-                font=ctk.CTkFont(size=12, weight="bold"),
-            ).pack(side="left", padx=12)
 
         self._search_var.trace_add("write", lambda *_: self._refresh_table())
         ctk.CTkEntry(
@@ -107,38 +109,35 @@ class SheetScreen:
         inp = ctk.CTkFrame(parent, fg_color="gray17", corner_radius=8)
         inp.pack(fill="x", padx=16, pady=(4, 4))
 
-        # ФИО обнаружившего
-        ctk.CTkLabel(inp, text="Обнаружил:").grid(row=0, column=0, padx=6, pady=8, sticky="e")
-        self._entry_inspector = ctk.CTkEntry(inp, placeholder_text="Иванов И.И.", width=160)
-        self._entry_inspector.grid(row=0, column=1, padx=4, pady=8)
+        # ФИО обнаружившего (placeholder вместо label)
+        self._entry_inspector = ctk.CTkEntry(inp, placeholder_text="Обнаружил: Иванов И.И.", width=180)
+        self._entry_inspector.grid(row=0, column=0, padx=(10, 4), pady=8)
 
-        # Дата обнаружения
-        ctk.CTkLabel(inp, text="Дата обн.:").grid(row=0, column=2, padx=6, pady=8, sticky="e")
-        self._find_date_entry = ctk.CTkEntry(inp, textvariable=self._find_date_var, width=100)
-        self._find_date_entry.grid(row=0, column=3, padx=4, pady=8)
-        ctk.CTkButton(inp, text="📅", width=32, command=self._pick_find_date).grid(row=0, column=4, padx=2)
+        # Дата обнаружения — клик открывает инлайн-календарь
+        self._find_date_entry = ctk.CTkEntry(
+            inp, textvariable=self._find_date_var, placeholder_text="Дата обн.", width=120
+        )
+        self._find_date_entry.grid(row=0, column=1, padx=4, pady=8)
+        self._find_date_entry.bind("<Button-1>", self._pick_find_date)
 
-        # № Опоры
-        ctk.CTkLabel(inp, text="№ Опоры:").grid(row=0, column=5, padx=6, pady=8, sticky="e")
-
+        # № Опоры (placeholder через label внутри dropdown)
         pole_values = [str(i) for i in range(1, self._pole_count + 1)] if self._pole_count > 0 else []
         self._dd_pole = ScrollableDropdown(
             inp,
             values=pole_values,
             variable=self._pole_var,
-            width=90,
-            placeholder="Выберите опору…",
+            width=110,
+            placeholder="№ Опоры",
         )
-        self._dd_pole.widget.grid(row=0, column=6, padx=4, pady=8)
+        self._dd_pole.widget.grid(row=0, column=2, padx=(8, 4), pady=8)
 
-        # Кнопка выбора дефекта
-        ctk.CTkLabel(inp, text="Элемент / Дефект:").grid(row=0, column=7, padx=6, pady=8, sticky="e")
+        # Кнопка выбора дефекта (текст-подсказка внутри кнопки)
         picker_frame = ctk.CTkFrame(inp, fg_color="transparent")
-        picker_frame.grid(row=0, column=8, columnspan=3, padx=4, pady=8, sticky="w")
+        picker_frame.grid(row=0, column=3, columnspan=3, padx=4, pady=8, sticky="w")
         self._picker_btn = ctk.CTkButton(
             picker_frame,
-            text="Выберите элемент и дефект…",
-            width=380,
+            text="Элемент / Дефект…",
+            width=580,
             height=34,
             fg_color="gray25",
             hover_color="gray35",
@@ -157,15 +156,18 @@ class SheetScreen:
             width=120,
             height=36,
             command=self._add_defect,
-        ).grid(row=0, column=11, padx=10, pady=8)
+        ).grid(row=0, column=6, padx=10, pady=8)
 
     # ────────────────────────── ДЕЙСТВИЯ ─────────────────────────────────────
 
-    def _pick_find_date(self):
+    def _pick_find_date(self, event=None):
         iso = parse_date_input(self._find_date_var.get())
-        result = DatePickerDialog.ask(self._parent, initial_date=iso, title="Дата обнаружения")
-        if result:
-            self._find_date_var.set(fmt_date(result))
+        InlineDatePicker(
+            master=self._parent,
+            anchor_widget=self._find_date_entry,
+            date_var=self._find_date_var,
+            initial_iso=iso,
+        )
 
     def _open_defect_tree(self):
         tree = self._ref_service.get_defect_tree()
@@ -212,23 +214,27 @@ class SheetScreen:
         for w in self._table_scroll.winfo_children():
             w.destroy()
 
-        tab = self._tab_var.get()
-        is_fixed = 1 if tab == "fixed" else 0
         search = self._search_var.get().strip().lower()
-        records = self._defect_service.fetch_records(self._sheet_id, is_fixed, search)
+        # Загружаем все дефекты (активные + устранённые) одним запросом
+        records_active = self._defect_service.fetch_records(self._sheet_id, 0, search)
+        records_fixed = self._defect_service.fetch_records(self._sheet_id, 1, search)
+        records = records_active + records_fixed
 
         DefectTable(
             container=self._table_scroll,
             records=records,
-            tab=tab,
+            tab="active",
             on_detail=self._detail_dialog,
             on_fix=self._fix_dialog,
             on_copy=self._copy_pole_dialog,
             on_delete=self._delete_defects,
         )
 
-    def _detail_dialog(self, records: list, pole_num: int):
-        DetailDialog(self._parent, pole_num, records)
+    def _detail_dialog(self, records: list, pole_num: int, on_fix=None):
+        # on_fix из таблицы — это lambda ids, pn: _fix_dialog(ids, pn)
+        # Но DetailDialog напрямую вызывает on_fix(ids, date, fixer)
+        # Поэтому передаём _on_fix_confirmed напрямую
+        DetailDialog(self._parent, pole_num, records, on_fix=self._on_fix_confirmed)
 
     def _fix_dialog(self, record_ids: list[int], pole_num: int):
         defects_info = self._defect_service.get_defects_info(record_ids)

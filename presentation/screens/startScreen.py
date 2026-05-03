@@ -5,14 +5,13 @@ from app.logger import get_logger
 
 logger = get_logger(__name__)
 
-
 class StartScreen:
     """
     Главный экран: список листков осмотра.
     Рисует себя внутри переданного parent-окна.
     """
 
-    def __init__(self, parent, sheets: list[tuple], on_create, on_open, on_delete):
+    def __init__(self, parent, sheets: list[tuple], on_create, on_open, on_delete, on_backup=None):
         """
         Args:
             parent:    Окно приложения (DefectApp).
@@ -21,6 +20,7 @@ class StartScreen:
             on_open:   Callable(sheet_id).
             on_delete: Callable(sheet_id).
         """
+        self._backup_callback = on_backup or (lambda: None)
         self._build(parent, sheets, on_create, on_open, on_delete)
 
     def _build(self, parent, sheets, on_create, on_open, on_delete):
@@ -37,12 +37,16 @@ class StartScreen:
             command=on_create,
         ).pack(side="left")
 
-        # Легенда
-        leg = ctk.CTkFrame(tb, fg_color="transparent")
-        leg.pack(side="right")
-        for label, color in [("Активные", "#e03131"), ("Устранённые", "#2f9e44")]:
-            ctk.CTkLabel(leg, text="■", text_color=color, font=ctk.CTkFont(size=16)).pack(side="left")
-            ctk.CTkLabel(leg, text=label, font=ctk.CTkFont(size=11)).pack(side="left", padx=(0, 10))
+        # Резервная копия справа
+        ctk.CTkButton(
+            tb,
+            text="💾 Резервная копия",
+            width=160,
+            height=38,
+            fg_color="gray35",
+            hover_color="gray50",
+            command=self._backup_callback,
+        ).pack(side="right", padx=4)
 
         if not sheets:
             ph = ctk.CTkFrame(parent, fg_color="transparent")
