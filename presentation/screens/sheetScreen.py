@@ -77,7 +77,7 @@ class SheetScreen:
         ).pack(side="left", padx=(12, 4), pady=6)
         ctk.CTkLabel(
             info,
-            text=f"Линия: {self._line}   |   Филиал: {self._filial}   |   {self._voltage} кВ",
+            text=f"Линия: {self._line}   |   Филиал: {self._filial}   |   {self._voltage}",
             font=ctk.CTkFont(size=13),
             text_color="#a8c4f0",
         ).pack(side="left", padx=8, pady=6)

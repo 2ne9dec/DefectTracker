@@ -266,7 +266,7 @@ class CreateSheetDialog(ctk.CTkToplevel):
         ctk.CTkEntry(df, textvariable=self._date_var, width=120).pack(side="left", padx=8)
         ctk.CTkButton(df, text="📅", width=36, command=self._pick_date).pack(side="left")
 
-        p = labeled_row("ФИО создателя:")
+        p = labeled_row("Создал ФИО:")
         ctk.CTkEntry(p, textvariable=self._creator_var, placeholder_text="Иванов И.И.", width=300).pack(fill="x")
 
         ctk.CTkButton(
