@@ -5,15 +5,20 @@ import customtkinter as ctk
 
 from shared.utils.dateUtils import parse_date_input, fmt_date
 from shared.widgets.datePicker import InlineDatePicker
+from shared import popupManager
 
 class ScrollableDropdown:
     """
     Кастомный выпадающий список с прокруткой колёсиком мыши.
-    Автоматически закрывается при клике вне списка или нажатии Esc.
+    Закрывается при клике вне списка, Esc и Alt+Tab.
+    Без системного скроллбара — свои стрелки вверх/вниз.
     """
 
     MAX_VISIBLE = 12
     ROW_HEIGHT = 24
+    ARROW_H = 18
+    ARROW_BG = "#1a2840"
+    ARROW_FG = "#6a9fd8"
 
     def __init__(self, parent, values, variable, width=300, placeholder="Выберите…", on_select=None):
         self._parent = parent
@@ -23,7 +28,14 @@ class ScrollableDropdown:
         self._placeholder = placeholder
         self._on_select = on_select
         self._popup = None
-        self._click_handler_id = None
+        self._lb = None
+        self._arrow_top = None
+        self._arrow_bot = None
+        self._root = None
+        self._closed = True
+        self._key_id = None
+        self._focusout_id = None
+        self._unmap_id = None
 
         self.widget = ctk.CTkButton(
             parent,
@@ -68,28 +80,31 @@ class ScrollableDropdown:
         self.widget.update_idletasks()
         x = self.widget.winfo_rootx()
         y = self.widget.winfo_rooty() + self.widget.winfo_height() + 2
-
         actual_width = self.widget.winfo_width()
 
         visible = min(len(self._values), self.MAX_VISIBLE)
-        height = visible * self.ROW_HEIGHT + 4
+        need_scroll = len(self._values) > visible
+        arrows_h = (2 * self.ARROW_H) if need_scroll else 0
+        lb_h = visible * self.ROW_HEIGHT + 4
+        total_h = lb_h + arrows_h
 
         popup = tk.Toplevel(self._parent)
         popup.overrideredirect(True)
         popup.attributes("-topmost", True)
-        popup.geometry(f"{actual_width}x{height}+{x}+{y}")
-        popup.configure(bg="#2b2b2b")
+        popup.geometry(f"{actual_width}x{total_h}+{x}+{y}")
+        popup.configure(bg=self.ARROW_BG)
         self._popup = popup
+        self._closed = False
+        popupManager.register(self)
 
-        frame = tk.Frame(popup, bg="#2b2b2b")
-        frame.pack(fill="both", expand=True, padx=0, pady=0)
+        # --- Верхняя стрелка ---
+        self._arrow_top = tk.Frame(popup, bg=self.ARROW_BG, height=self.ARROW_H)
+        self._arrow_top.pack_propagate(False)
+        tk.Label(self._arrow_top, text="▲", bg=self.ARROW_BG, fg=self.ARROW_FG, font=("Segoe UI", 8)).pack(expand=True)
 
-        sb = tk.Scrollbar(frame, orient="vertical", bg="#3a3a3a", troughcolor="#2b2b2b", activebackground="#555")
-        sb.pack(side="right", fill="y")
-
+        # --- Listbox (без скроллбара) ---
         lb = tk.Listbox(
-            frame,
-            yscrollcommand=sb.set,
+            popup,
             bg="#2b2b2b",
             fg="#e0e0e0",
             selectbackground="#2b579a",
@@ -100,8 +115,23 @@ class ScrollableDropdown:
             borderwidth=0,
             highlightthickness=0,
         )
-        lb.pack(side="left", fill="both", expand=True)
-        sb.config(command=lb.yview)
+        lb.pack(fill="both", expand=True)
+        self._lb = lb
+
+        # --- Нижняя стрелка ---
+        self._arrow_bot = tk.Frame(popup, bg=self.ARROW_BG, height=self.ARROW_H)
+        self._arrow_bot.pack_propagate(False)
+        tk.Label(self._arrow_bot, text="▼", bg=self.ARROW_BG, fg=self.ARROW_FG, font=("Segoe UI", 8)).pack(expand=True)
+
+        if need_scroll:
+            self._arrow_top.pack(side="top", fill="x", before=lb)
+            self._arrow_bot.pack(side="bottom", fill="x")
+            self._arrow_top.bind("<Button-1>", lambda e: self._scroll(-1))
+            self._arrow_bot.bind("<Button-1>", lambda e: self._scroll(1))
+            for w in self._arrow_top.winfo_children():
+                w.bind("<Button-1>", lambda e: self._scroll(-1))
+            for w in self._arrow_bot.winfo_children():
+                w.bind("<Button-1>", lambda e: self._scroll(1))
 
         for item in self._values:
             lb.insert("end", f"  {item}")
@@ -114,13 +144,9 @@ class ScrollableDropdown:
 
         def on_wheel(event):
             lb.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        def on_wheel_linux(event):
-            lb.yview_scroll(-1 if event.num == 4 else 1, "units")
+            self._update_arrows()
 
         lb.bind("<MouseWheel>", on_wheel)
-        lb.bind("<Button-4>", on_wheel_linux)
-        lb.bind("<Button-5>", on_wheel_linux)
         popup.bind("<MouseWheel>", on_wheel)
 
         def select(event=None):
@@ -134,62 +160,141 @@ class ScrollableDropdown:
 
         lb.bind("<ButtonRelease-1>", select)
         lb.bind("<Return>", select)
-        popup.bind("<Escape>", lambda e: self._close())
 
-        # ✅ Глобальный обработчик кликов для закрытия при клике вне списка
-        self._bind_click_outside(popup)
+        self._update_arrows()
+        self._root = self._parent.winfo_toplevel()
+        self._key_id = self._root.bind("<KeyPress>", self._on_key, add="+")
+        self._focusout_id = self._root.bind("<FocusOut>", self._on_focusout, add="+")
+        self._unmap_id = self._root.bind("<Unmap>", self._on_unmap, add="+")
+        popup.after(200, self._poll_focus)
 
         popup.focus_set()
 
-    def _bind_click_outside(self, popup):
-        """
-        Привязывает обработчик кликов по всему приложению.
-        Закрывает popup, если клик был вне его и вне кнопки.
-        """
+    def _scroll(self, direction):
+        if self._lb:
+            self._lb.yview_scroll(direction, "units")
+            self._update_arrows()
 
-        def on_click_outside(event):
-            # Проверяем, является ли виджет, по которому кликнули,
-            # частью popup или кнопки
-            widget = event.widget
-            is_popup_child = False
+    def _update_arrows(self):
+        if not self._lb or not self._popup:
+            return
+        if not (self._arrow_top and self._arrow_bot):
+            return
+        try:
+            top, bot = self._lb.yview()
+            if top <= 0.001:
+                self._arrow_top.configure(bg="#111a2a")
+                for w in self._arrow_top.winfo_children():
+                    w.configure(bg="#111a2a", fg="#3a5a78")
+            else:
+                self._arrow_top.configure(bg=self.ARROW_BG)
+                for w in self._arrow_top.winfo_children():
+                    w.configure(bg=self.ARROW_BG, fg=self.ARROW_FG)
 
-            # Проверяем, не является ли виджет частью popup
-            try:
-                while widget:
-                    if widget == popup or widget == self.widget:
-                        is_popup_child = True
-                        break
-                    widget = widget.master
-            except Exception:
-                pass
+            if bot >= 0.999:
+                self._arrow_bot.configure(bg="#111a2a")
+                for w in self._arrow_bot.winfo_children():
+                    w.configure(bg="#111a2a", fg="#3a5a78")
+            else:
+                self._arrow_bot.configure(bg=self.ARROW_BG)
+                for w in self._arrow_bot.winfo_children():
+                    w.configure(bg=self.ARROW_BG, fg=self.ARROW_FG)
+        except Exception:
+            pass
 
-            # Если клик не по popup и не по кнопке — закрываем
-            if not is_popup_child:
+    def _on_key(self, e):
+        if e.keysym == "Escape":
+            self._close()
+
+    def _on_focusout(self, e):
+        if self._closed:
+            return
+
+        if self._popup:
+            self._popup.after(150, self._check_focus_lost)
+
+    def _on_unmap(self, e):
+        if self._closed:
+            return
+        if e.widget == self._root:
+            self._close()
+
+    def _check_focus_lost(self):
+        if self._closed:
+            return
+        try:
+            focused = self._root.focus_get()
+            if focused is None:
                 self._close()
+                return
+            focused_top = focused.winfo_toplevel()
+            if focused_top != self._root and focused_top != self._popup:
+                self._close()
+        except Exception:
+            self._close()
 
-        # Привязываемся ко всем событиям мыши на верхнем уровне
-        # Используем bind_all для перехвата кликов в любом месте приложения
-        self._click_handler_id = popup.bind_all("<Button-1>", on_click_outside, add="+")
+    def _is_mouse_inside(self):
+        if not self._popup or not self._popup.winfo_exists():
+            return False
+        try:
+            mx = self._root.winfo_pointerx()
+            my = self._root.winfo_pointery()
+            x = self._popup.winfo_rootx()
+            y = self._popup.winfo_rooty()
+            w = self._popup.winfo_width()
+            h = self._popup.winfo_height()
+            return x <= mx <= x + w and y <= my <= y + h
+        except Exception:
+            return False
+
+    def _poll_focus(self):
+        if self._closed or not self._popup:
+            return
+        try:
+            focused = self._root.focus_get()
+            if focused is None:
+                self._close()
+                return
+            focused_top = focused.winfo_toplevel()
+            if focused_top != self._root and focused_top != self._popup:
+                self._close()
+                return
+        except Exception:
+            self._close()
+            return
+        try:
+            self._popup.after(150, self._poll_focus)
+        except Exception:
+            pass
 
     def _close(self):
-        if self._popup:
-            # ✅ Отвязываем глобальный обработчик
-            if self._click_handler_id:
-                try:
-                    self._popup.unbind_all("<Button-1>", self._click_handler_id)
-                except Exception:
-                    # Fallback для старых версий tkinter
+        if self._closed:
+            return
+        self._closed = True
+        if self._root:
+            for bid, event in [
+                (self._key_id, "<KeyPress>"),
+                (self._focusout_id, "<FocusOut>"),
+                (self._unmap_id, "<Unmap>"),
+            ]:
+                if bid:
                     try:
-                        self._popup.unbind_all("<Button-1>")
+                        self._root.unbind(event, bid)
                     except Exception:
                         pass
-                self._click_handler_id = None
-
-            try:
+        self._key_id = None
+        self._focusout_id = None
+        self._unmap_id = None
+        popupManager.unregister(self)
+        try:
+            if self._popup:
                 self._popup.destroy()
-            except Exception:
-                pass
-            self._popup = None
+        except Exception:
+            pass
+        self._popup = None
+        self._lb = None
+        self._arrow_top = None
+        self._arrow_bot = None
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  CreateSheetDialog

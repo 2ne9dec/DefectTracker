@@ -1,6 +1,8 @@
 import datetime
 import os
+import tkinter as tk
 import tkinter.messagebox as msg
+import tkinter.filedialog as filedialog
 import openpyxl
 
 from features.export.sheetFormatter import SheetFormatter
@@ -47,6 +49,23 @@ class ExcelExporter:
         )
 
         safe = safe_filename(self.line)
-        filename = f"Листок_{safe}_{datetime.date.today():%Y-%m-%d}.xlsx"
-        wb.save(filename)
-        msg.showinfo("Экспорт", f"Файл сохранён:\n{os.path.abspath(filename)}")
+        default_name = f"Листок_{safe}_{datetime.date.today():%Y-%m-%d}.xlsx"
+
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+
+        filepath = filedialog.asksaveasfilename(
+            parent=root,
+            title="Сохранить как",
+            initialfile=default_name,
+            defaultextension=".xlsx",
+            filetypes=[("Excel файлы", "*.xlsx"), ("Все файлы", "*.*")],
+        )
+        root.destroy()
+
+        if not filepath:
+            return
+
+        wb.save(filepath)
+        msg.showinfo("Экспорт", f"Файл сохранён:\n{os.path.abspath(filepath)}")

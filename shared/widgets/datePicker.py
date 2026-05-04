@@ -186,8 +186,6 @@ class InlineDatePicker(ctk.CTkToplevel):
         self._view_year, self._view_month = t.year, t.month
         self._pick(t.day)
 
-
-# Оставляем старый DatePickerDialog для совместимости (используется в fixDefectDialog)
 class DatePickerDialog(ctk.CTkToplevel):
     """Модальный диалог выбора даты (используется в диалоге устранения)."""
 
