@@ -70,7 +70,7 @@ class StartScreen:
             "Устранено",
             "Действия",
         ]
-        widths = [44, 160, 120, 360, 100, 130, 88, 88, 160]
+        widths = [44, 180, 140, 520, 100, 170, 80, 80, 180]
 
         outer = ctk.CTkFrame(parent, fg_color="transparent")
         outer.pack(fill="both", expand=True, padx=16, pady=(4, 12))
@@ -109,12 +109,16 @@ class StartScreen:
             row = ctk.CTkFrame(container, fg_color=row_bg, corner_radius=4)
             row.pack(fill="x", padx=0, pady=1)
 
-            line_txt = sheet[3][:50] + "…" if len(sheet[3]) > 50 else sheet[3]
+            for i in range(len(widths)):
+                row.grid_columnconfigure(i, weight=1 if i == 3 else 0)
+
+            line_txt = sheet[3] 
+            
             data_cells = [
                 (str(idx), widths[0], "center"),
                 (sheet[1], widths[1], "w"),
                 (sheet[2], widths[2], "w"),
-                (line_txt, widths[3], "w"),
+                (line_txt, widths[3], "w"), # Теперь полный текст
                 (fmt_date(sheet[4]), widths[4], "center"),
                 (sheet[5], widths[5], "w"),
             ]

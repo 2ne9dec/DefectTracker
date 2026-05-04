@@ -4,7 +4,7 @@ import tkinter.messagebox as msg
 import customtkinter as ctk
 
 from shared.utils.dateUtils import parse_date_input, fmt_date
-from shared.widgets.datePicker import DatePickerDialog
+from shared.widgets.datePicker import InlineDatePicker
 
 class ScrollableDropdown:
     """
@@ -263,8 +263,9 @@ class CreateSheetDialog(ctk.CTkToplevel):
         df = ctk.CTkFrame(self, fg_color="transparent")
         df.pack(fill="x", padx=24, pady=6)
         ctk.CTkLabel(df, text="Дата осмотра:", width=130, anchor="e").pack(side="left")
-        ctk.CTkEntry(df, textvariable=self._date_var, width=120).pack(side="left", padx=8)
-        ctk.CTkButton(df, text="📅", width=36, command=self._pick_date).pack(side="left")
+        self._date_entry = ctk.CTkEntry(df, textvariable=self._date_var, width=120)
+        self._date_entry.pack(side="left", padx=8)
+        self._date_entry.bind("<Button-1>", self._pick_date)
 
         p = labeled_row("Создал ФИО:")
         ctk.CTkEntry(p, textvariable=self._creator_var, placeholder_text="Иванов И.И.", width=300).pack(fill="x")
@@ -280,11 +281,14 @@ class CreateSheetDialog(ctk.CTkToplevel):
         ).pack(pady=16)
         self.bind("<Return>", lambda e: self._confirm())
 
-    def _pick_date(self):
+    def _pick_date(self, event=None):
         iso = parse_date_input(self._date_var.get())
-        result = DatePickerDialog.ask(self, initial_date=iso, title="Дата осмотра")
-        if result:
-            self._date_var.set(fmt_date(result))
+        InlineDatePicker(
+            master=self,
+            anchor_widget=self._date_entry,
+            date_var=self._date_var,
+            initial_iso=iso,
+        )
 
     def _on_filial(self, choice):
         refs = self._refs
