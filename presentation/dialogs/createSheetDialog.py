@@ -36,6 +36,7 @@ class ScrollableDropdown:
         self._key_id = None
         self._focusout_id = None
         self._unmap_id = None
+        self._click_outside_id = None
 
         self.widget = ctk.CTkButton(
             parent,
@@ -166,6 +167,7 @@ class ScrollableDropdown:
         self._key_id = self._root.bind("<KeyPress>", self._on_key, add="+")
         self._focusout_id = self._root.bind("<FocusOut>", self._on_focusout, add="+")
         self._unmap_id = self._root.bind("<Unmap>", self._on_unmap, add="+")
+        self._click_outside_id = self._root.bind("<Button-1>", self._on_click_outside, add="+")
         popup.after(200, self._poll_focus)
 
         popup.focus_set()
@@ -217,6 +219,30 @@ class ScrollableDropdown:
         if self._closed:
             return
         if e.widget == self._root:
+            self._close()
+
+    def _on_click_outside(self, e):
+        """Закрывает попап при клике вне его области."""
+        if self._closed or not self._popup:
+            return
+        try:
+            px = self._popup.winfo_rootx()
+            py = self._popup.winfo_rooty()
+            pw = self._popup.winfo_width()
+            ph = self._popup.winfo_height()
+            # Координаты клика в экранных координатах
+            ex = e.widget.winfo_rootx() + e.x
+            ey = e.widget.winfo_rooty() + e.y
+            # Также проверяем, не кликнули ли по самой кнопке виджета
+            bx = self.widget.winfo_rootx()
+            by = self.widget.winfo_rooty()
+            bw = self.widget.winfo_width()
+            bh = self.widget.winfo_height()
+            in_popup = px <= ex <= px + pw and py <= ey <= py + ph
+            in_button = bx <= ex <= bx + bw and by <= ey <= by + bh
+            if not in_popup and not in_button:
+                self._close()
+        except Exception:
             self._close()
 
     def _check_focus_lost(self):
@@ -276,6 +302,7 @@ class ScrollableDropdown:
                 (self._key_id, "<KeyPress>"),
                 (self._focusout_id, "<FocusOut>"),
                 (self._unmap_id, "<Unmap>"),
+                (self._click_outside_id, "<Button-1>"),
             ]:
                 if bid:
                     try:
@@ -285,6 +312,7 @@ class ScrollableDropdown:
         self._key_id = None
         self._focusout_id = None
         self._unmap_id = None
+        self._click_outside_id = None
         popupManager.unregister(self)
         try:
             if self._popup:
